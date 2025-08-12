@@ -41,10 +41,15 @@ app.post("/api/employees", async (req, res) => {
   const { name, email, designation, department } = req.body;
 
   if (!name || !email || !designation || !department) {
-    return res.status(400).json({ error: "All fields are required" });
+    return res.status(400).json({success:false, error: "All fields are required" });
   }
 
   try {
+    //check if email already exists
+    const [existing] = await db.query("SELECT id FROM employees WHERE email = ?", [email]);
+    if(existing.length > 0){
+      return res.status(400).json({ success: false, error:'Email already exists', field: 'email'});
+    }
     const sql =
       "INSERT INTO employees (name, email, designation, department) VALUES (?, ?, ?, ?)";
     const [result] = await db.query(sql, [
@@ -53,6 +58,7 @@ app.post("/api/employees", async (req, res) => {
       designation,
       department,
     ]);
+
 
     // Return the new employee object
     const newEmployee = {
@@ -64,9 +70,9 @@ app.post("/api/employees", async (req, res) => {
     };
 
     // res.json({ message: "Employee added", employee: newEmployee });
-      res.status(201).json({ message: "Employee added successfully", employee: newEmployee });
+      res.status(201).json({ success:true, message: "Employee added successfully", employee: newEmployee });
   } catch (error) {
-    res.status(500).json({
+    res.status(500).json({ success:false,
       error: "Failed to add employee",
       details: error.message,
     });
@@ -74,63 +80,30 @@ app.post("/api/employees", async (req, res) => {
 });
 
 // PUT Update employee
-// app.put("/api/employees/:id", async (req, res)=>{
-//   const {id} = req.params;
-//   const {name, email, designation, department} = req.body;
-
-//   if(!name || !email || !designation || !department){
-//     return res.status(400).json({ error:"All fields are required"});
-//   }
-
-//   const sql = "UPDATE employees SET name=?, email=?, designation=?, department=? WHERE id=?";
-//       db.query(sql,[
-//         name,
-//         email,
-//         designation,
-//         department,
-//         id
-//       ], (err, result)=>{
-//         if(err) return res.status(500).json({ error: 'Failed to update employee'});
-//         if(result.affectedRows === 0 ) return res.status(404).json({ error:'Employee not Found'});
-        
-//         res.json({ message:"Employee updated successfully", employee: {id,name,email, designation, department}})
-//       })
-// })
-
 app.put("/api/employees/:id", async (req, res) => {
-  const {id} = req.params;
-  const {name, email, designation, department} = req.body;
-
-  // Validation
-  if(!name || !email || !designation || !department) {
+  const id = req.params.id;
+  const { name, email, designation, department } = req.body;
+  if (!name || !email || !designation || !department) {
     return res.status(400).json({ error: "All fields are required" });
   }
-
-  const sql = "UPDATE employees SET name=?, email=?, designation=?, department=? WHERE id=?";
-  
-  db.query(sql, [name, email, designation, department, id], (err, result) => {
-    if(err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ error: 'Failed to update employee' });
+  try {
+    const sql = "UPDATE employees SET name=?, email=?, designation=?, department=? WHERE id=?";
+    const [result] = await db.query(sql, [name, email, designation, department, id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Employee not found" });
     }
-    
-    if(result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Employee not found' });
+    // Fetch the updated employee
+    const [rows] = await db.query("SELECT * FROM employees WHERE id = ?", [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Employee not found after update" });
     }
-    
-    // Get the updated record to ensure consistency
-    db.query("SELECT * FROM employees WHERE id = ?", [id], (err, rows) => {
-      if(err || rows.length === 0) {
-        // Fallback to what we tried to update
-        const updatedEmployee = { id, name, email, designation, department };
-        return res.json({ employee: updatedEmployee });
-      }
-      
-      // Return the actual updated record from database
-      res.json({ employee: rows[0] });
-    });
-  });
+    res.json({ message: "Employee updated successfully", employee: rows[0] });
+  } catch (error) {
+    console.error("Update error:", error);
+    res.status(500).json({ error: "Failed to update employee", details: error.message });
+  }
 });
+
 
 // Delete employee
 app.delete("/api/employees/:id", (req, res) => {
