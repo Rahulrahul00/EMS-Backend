@@ -141,10 +141,12 @@ export const getAttandanceReport = async (req, res) => {
 // };
 
 export const getEmployeeReport = async (req, res) => {
-  const { employeeName } = req.query;
+  const { employeeName="", page = 1, pageSize = 5 } = req.query;
 
   try {
     const db = getDB();
+
+    const offset = (page - 1) * pageSize;
 
     const [report] = await db.query(
       `
@@ -168,10 +170,32 @@ export const getEmployeeReport = async (req, res) => {
       WHERE e.name LIKE ?
       GROUP BY e.id, e.name
       ORDER BY e.name ASC
+      LIMIT ? OFFSET ?
       `,
-      [`%${employeeName || ''}%`]
+      // [`%${employeeName || ''}%`]
+      [`%${employeeName}%`, Number(pageSize), Number(offset)]
     );
-    res.json(report);
+
+    //Get total count (without LIMIT) for pagination
+    const [[{ total}]] = await db.query(
+       `
+      SELECT COUNT(*) AS total
+      FROM employees e
+      WHERE e.name LIKE ?
+      `,
+      [`%${employeeName}%`]
+    );
+
+
+  res.json({
+    data: report,
+    pagination:{
+      current: Number(page),
+      pageSize: Number(pageSize),
+      total,
+
+    },
+  });
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch employee report",
@@ -211,8 +235,25 @@ export const exportEmployeeReport = async (req, res) =>{
         [`%${employeeName || ''}%`]
       );
       
+    // formatte total working hours in "Hh Mm" 
+    const formatHours = (decimalHours) =>{
+      if(!decimalHours) return '0h 0m';
+      const hours = Math.floor(decimalHours);
+      const minutes = Math.floor((decimalHours - hours) * 60);
+      return `${hours}h ${minutes}m`
+    }
+
+    const formattedReport = report.map((row,index)=>({
+      sl_no : index +1,
+      ...row,
+      total_working_hours: formatHours(row.total_working_hours),
+      
+     }));
+     
+     const exportData = formattedReport.map(({ id, ...rest }) => rest);
+     
       //create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(report);
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
 
       //create work book
       const workbook = XLSX.utils.book_new();
