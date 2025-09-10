@@ -7,7 +7,12 @@ import cors from "cors";
 import authRoutes from './routes/authRoutes.js';
 import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from './routes/attendanceRoutes.js';
+import leaveRoutes from './routes/leaveRoutes.js';
+import holidayRoutes from './routes/holidayRoutes.js';
 import {connectDB} from './config/db.js';
+import { createHolidayTable } from "./models/Holiday..js";
+import { createLeaveTable } from "./models/Leave.js";
+
 
 
 
@@ -21,6 +26,8 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/attendances', attendanceRoutes);
+app.use('/api/leavereports', leaveRoutes);
+app.use('/api/holidayreport', holidayRoutes);
 
 
 //JWT Secret Key
@@ -473,8 +480,26 @@ export const createTransporter = () => {
 //   }
 // });
 
-connectDB().then(() => {
-  app.listen(5000, () =>
-    console.log("Server running on http://localhost:5000")
-  );
-});
+connectDB()
+  .then(async () => {
+    console.log("MySQL connected");
+
+    // 👇 Create table if not exists
+    await createLeaveTable();
+    await createHolidayTable();
+    console.log("leave_reports table ready");
+    
+
+    app.listen(5000, () =>
+      console.log("Server running on http://localhost:5000")
+    );
+  })
+  .catch((err) => {
+    console.error("DB connection failed:", err);
+  });
+
+// connectDB().then(() => {
+//   app.listen(5000, () =>
+//     console.log("Server running on http://localhost:5000")
+//   );
+// });
