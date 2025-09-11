@@ -8,7 +8,7 @@ export const createAttendanceTable = async () => {
     id INT AUTO_INCREMENT PRIMARY KEY,
     employee_id INT NOT NULL,
     date DATE NOT NULL,
-    status ENUM('present', 'absent', 'late', 'half_day') NOT NULL,
+    status ENUM('present', 'absent', 'leave', 'half_day') NOT NULL,
     check_in TIME,
     check_out TIME,
     FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,

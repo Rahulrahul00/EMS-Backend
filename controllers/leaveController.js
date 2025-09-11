@@ -5,6 +5,15 @@ export const createLeaveReport = async (req, res) =>{
     const db = getDB();
     try {
         const {employee_id, employee_name, date, leave_type, status, reason} = req.body;
+
+        //check existing same date and id
+        const [existing] = await db.query(
+          "SELECT * FROM leave_reports WHERE date = ? AND employee_id = ?",
+          [date, employee_id]
+        );
+        if(existing.length > 0){
+          return res.status(400).json({error:"Leave already applied for this date"})
+        }
         const [result] = await db.query(
             "INSERT INTO leave_reports (employee_id, employee_name, date, leave_type, status, reason) VALUES (?, ?, ?, ?, ?, ?)",
             [employee_id, employee_name, date, leave_type, status, reason]
@@ -13,7 +22,6 @@ export const createLeaveReport = async (req, res) =>{
     } catch (error) {
         res.status(500).json({message: 'Error creating leave report', error: error.message})
     }
-
 };
 
 //Get all leave report

@@ -24,6 +24,24 @@ export const addAttendance = async (req, res) => {
       return res.status(404).json({ error: "Employ not found" });
     }
 
+    //Check if the date is already holiday
+    const [holiday] = await db.query("SELECT name FROM holidays WHERE date = ?",[
+      date,
+    ]);
+
+    if(holiday.length > 0){
+     return res.status(400).json({ error:`It's a holiday for ${holiday[0].name}`})
+    }
+
+    //check if date is already Leave
+    const [leave] = await db.query("SELECT employee_name FROM leave_reports WHERE date = ?", [
+      date,
+    ]);
+
+    if(leave.length > 0){
+      return res.status(400).json({ error: `${leave[0].employee_name} is already on leave`})
+    }
+
     //check if  attendances is already exists
     const [existing] = await db.query(
       "SELECT id FROM attendance WHERE employee_id = ? AND date = ?",
