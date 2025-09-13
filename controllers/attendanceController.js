@@ -164,7 +164,7 @@ export const getAttandanceReport = async (req, res) => {
     const { employeeName="", page = 1, pageSize = 5, startDate, endDate } = req.query;
 
     try {
-      const db = getDB();
+      const db = getDB(); 
 
       const offset = (page - 1) * pageSize;
 
@@ -197,12 +197,26 @@ export const getAttandanceReport = async (req, res) => {
           e.id AS employee_id,
           e.name AS employee_name,
           
-          COUNT(a.id) AS total_working_days, 
+          COUNT(CASE WHEN a.status = 'present' THEN 1 END) AS total_working_days,
           COUNT(CASE WHEN a.status = 'present' THEN 1 END) AS total_present,
           COUNT(CASE WHEN a.status = 'absent' THEN 1 END) AS total_absent,
-          COUNT(CASE WHEN a.status = 'leave' THEN 1 END) AS total_leaves,
-
-          COUNT(CASE WHEN a.status IN ('present', 'leave') THEN 1 END) AS total_active_days,
+          
+          -- fetch total leaves from leave_reports table
+          (
+            SELECT COUNT(*)
+            FROM leave_reports l
+            WHERE l.employee_id = e.id
+            AND l.date BETWEEN ? AND ?
+          ) AS total_leaves,
+          
+          -- active days = present + leave
+          (COUNT (CASE WHEN a.status = 'present' THEN 1 END)) +
+          (
+            SELECT COUNT(*)
+            FROM leave_reports l
+            WHERE l.employee_id = e.id
+            AND l.date BETWEEN ? AND ?
+          ) AS total_active_days,
           
           ROUND(SUM(
               CASE
@@ -232,13 +246,22 @@ export const getAttandanceReport = async (req, res) => {
           AND a.date BETWEEN ? AND ?
         WHERE e.name LIKE ?
         GROUP BY e.id, e.name
+        HAVING total_working_days > 0 OR total_leaves > 0
         ORDER BY e.name ASC
         LIMIT ? OFFSET ?
         
       `,
+      [
+        startDate, endDate, // for total leaves
+        startDate, endDate, // for total_active_days
+        startDate, endDate, // for attendance join
+        `%${employeeName}%`,
+        Number(pageSize),
+        Number(offset),
+      ]
 
         // [`%${employeeName || ''}%`]
-        [ startDate, endDate, `%${employeeName}%`, Number(pageSize), Number(offset)]
+        // [ startDate, endDate, `%${employeeName}%`, Number(pageSize), Number(offset)]
       );
 
       //Get total count (without LIMIT) for pagination
