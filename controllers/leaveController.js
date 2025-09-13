@@ -14,6 +14,24 @@ export const createLeaveReport = async (req, res) =>{
         if(existing.length > 0){
           return res.status(400).json({error:"Leave already applied for this date"})
         }
+
+      //check if attendance and leave is already existing
+      const [attendance] =  await db.query('SELECT employee_id FROM attendance WHERE date = ? AND employee_id =?',
+        [date, employee_id]
+      );
+
+      if(attendance.length > 0){
+        return res.status(400).json({error:"Already attendance marked"})
+      }
+
+      //check if holiday and leave already existing
+      const [holiday] = await db.query('SELECT name FROM holidays  WHERE date = ?',
+        [date]
+      );
+      if(holiday.length > 0){
+        return res.status(400).json({error:`It's a holiday for ${holiday[0].name}`})
+      }
+
         const [result] = await db.query(
             "INSERT INTO leave_reports (employee_id, employee_name, date, leave_type, status, reason) VALUES (?, ?, ?, ?, ?, ?)",
             [employee_id, employee_name, date, leave_type, status, reason]

@@ -14,6 +14,8 @@ export const addAttendance = async (req, res) => {
       .status(400)
       .json({ error: "Employee ID, date, and status are required" });
   }
+  
+  
   try {
     const db = getDB();
     //check if employe is exists
@@ -34,9 +36,9 @@ export const addAttendance = async (req, res) => {
     }
 
     //check if date is already Leave
-    const [leave] = await db.query("SELECT employee_name FROM leave_reports WHERE date = ?", [
-      date,
-    ]);
+    const [leave] = await db.query("SELECT employee_name FROM leave_reports WHERE date = ? AND employee_id = ?", 
+      [date, employee_id]
+    );
 
     if(leave.length > 0){
       return res.status(400).json({ error: `${leave[0].employee_name} is already on leave`})
@@ -158,69 +160,114 @@ export const getAttandanceReport = async (req, res) => {
 //   }
 // };
 
-export const getEmployeeReport = async (req, res) => {
-  const { employeeName="", page = 1, pageSize = 5 } = req.query;
+  export const getEmployeeReport = async (req, res) => {
+    const { employeeName="", page = 1, pageSize = 5, startDate, endDate } = req.query;
 
-  try {
-    const db = getDB();
+    try {
+      const db = getDB();
 
-    const offset = (page - 1) * pageSize;
+      const offset = (page - 1) * pageSize;
 
-    const [report] = await db.query(
-      `
-      SELECT 
-        e.id AS employee_id,
-        e.name AS employee_name,
-        COUNT(CASE WHEN a.status = 'present' THEN 1 END) AS total_working_days,
-        COUNT(CASE WHEN a.status = 'absent' THEN 1 END) AS total_leaves,
-        ROUND(SUM(
-          CASE 
-            WHEN a.status = 'present' 
-              AND a.check_in IS NOT NULL 
-              AND a.check_out IS NOT NULL 
-            THEN TIME_TO_SEC(TIMEDIFF(a.check_out, a.check_in)) / 3600
-            ELSE 0
-          END
-        ), 1) AS total_working_hours
-      FROM employees e
-      LEFT JOIN attendance a 
-        ON e.id = a.employee_id
-      WHERE e.name LIKE ?
-      GROUP BY e.id, e.name
-      ORDER BY e.name ASC
-      LIMIT ? OFFSET ?
+      const [report] = await db.query(
+        // `
+        // SELECT 
+        //   e.id AS employee_id,
+        //   e.name AS employee_name,
+        //   COUNT(CASE WHEN a.status = 'present' THEN 1 END) AS total_working_days,
+        //   COUNT(CASE WHEN a.status = 'absent' THEN 1 END) AS total_leaves,
+        //   ROUND(SUM(
+        //     CASE 
+        //       WHEN a.status = 'present' 
+        //         AND a.check_in IS NOT NULL 
+        //         AND a.check_out IS NOT NULL 
+        //       THEN TIME_TO_SEC(TIMEDIFF(a.check_out, a.check_in)) / 3600
+        //       ELSE 0
+        //     END
+        //   ), 1) AS total_working_hours
+        // FROM employees e
+        // LEFT JOIN attendance a 
+        //   ON e.id = a.employee_id
+        // WHERE e.name LIKE ?
+        // GROUP BY e.id, e.name
+        // ORDER BY e.name ASC
+        // LIMIT ? OFFSET ?
+        // `,
+
+        `SELECT
+          e.id AS employee_id,
+          e.name AS employee_name,
+          
+          COUNT(a.id) AS total_working_days, 
+          COUNT(CASE WHEN a.status = 'present' THEN 1 END) AS total_present,
+          COUNT(CASE WHEN a.status = 'absent' THEN 1 END) AS total_absent,
+          COUNT(CASE WHEN a.status = 'leave' THEN 1 END) AS total_leaves,
+
+          COUNT(CASE WHEN a.status IN ('present', 'leave') THEN 1 END) AS total_active_days,
+          
+          ROUND(SUM(
+              CASE
+                WHEN a.status = 'present'
+                  AND a.check_in IS NOT NULL
+                  AND a.check_out IS NOT NULL
+                THEN TIME_TO_SEC(TIMEDIFF(a.check_out, a.check_in)) / 3600
+                ELSE 0
+                END
+              ), 1) AS total_working_hours,
+
+              ROUND(
+              SUM(
+                CASE
+                WHEN a.status = 'present'
+                  AND a.check_in IS NOT NULL
+                  AND a.check_out IS NOT NULL
+                THEN TIME_TO_SEC(TIMEDIFF(a.check_out, a.check_in)) / 3600
+                ELSE 0
+              END   
+              ) / NULLIF(COUNT(CASE WHEN a.status = 'present' THEN 1 END), 0), 1
+              ) AS avg_working_hours
+
+        FROM employees e
+        LEFT JOIN attendance a
+          ON e.id = a.employee_id
+          AND a.date BETWEEN ? AND ?
+        WHERE e.name LIKE ?
+        GROUP BY e.id, e.name
+        ORDER BY e.name ASC
+        LIMIT ? OFFSET ?
+        
       `,
-      // [`%${employeeName || ''}%`]
-      [`%${employeeName}%`, Number(pageSize), Number(offset)]
-    );
 
-    //Get total count (without LIMIT) for pagination
-    const [[{ total}]] = await db.query(
-       `
-      SELECT COUNT(*) AS total
-      FROM employees e
-      WHERE e.name LIKE ?
-      `,
-      [`%${employeeName}%`]
-    );
+        // [`%${employeeName || ''}%`]
+        [ startDate, endDate, `%${employeeName}%`, Number(pageSize), Number(offset)]
+      );
+
+      //Get total count (without LIMIT) for pagination
+      const [[{ total}]] = await db.query(
+        `
+        SELECT COUNT(*) AS total
+        FROM employees e
+        WHERE e.name LIKE ?
+        `,
+        [`%${employeeName}%`]
+      );
 
 
-  res.json({
-    data: report,
-    pagination:{
-      current: Number(page),
-      pageSize: Number(pageSize),
-      total,
+    res.json({
+      data: report,
+      pagination:{
+        current: Number(page),
+        pageSize: Number(pageSize),
+        total,
 
-    },
-  });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to fetch employee report",
-      details: error.message,
+      },
     });
-  }
-};
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to fetch employee report",
+        details: error.message,
+      });
+    }
+  };
 
 export const exportEmployeeReport = async (req, res) =>{
   const {employeeName} =req.query;
